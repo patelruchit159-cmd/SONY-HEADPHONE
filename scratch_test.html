@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Color and Blending Test</title>
+  <style>
+    body {
+      margin: 0;
+      background-color: #050505;
+      color: white;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    .test-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 20px;
+      margin-top: 20px;
+      max-width: 1000px;
+    }
+    .card {
+      border: 1px solid #333;
+      padding: 15px;
+      background: #111;
+      text-align: center;
+      flex: 1 1 300px;
+      max-width: 450px;
+      box-sizing: border-box;
+    }
+    img, canvas {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 10px auto;
+      border: 1px dashed #444;
+    }
+    .bg-match {
+      background-color: #e5e5e5;
+      color: black;
+    }
+    .bg-dark {
+      background-color: #050505;
+    }
+    .bg-inverted {
+      background-color: #050505;
+    }
+    .bg-inverted img {
+      filter: invert(1);
+    }
+    .bg-luma-key {
+      background-color: #050505;
+    }
+  </style>
+</head>
+<body>
+  <h1>Sony WH-1000XM6 Frame Blending Test</h1>
+  <div class="test-container">
+    <div class="card bg-dark">
+      <h3>Original on Dark (#050505)</h3>
+      <img src="ezgif-63be88cbbd9455f6-jpg.js/ezgif-frame-001.jpg" alt="Frame 001">
+    </div>
+    <div class="card bg-match" id="match-card">
+      <h3>Matching Background</h3>
+      <img id="test-img" src="ezgif-63be88cbbd9455f6-jpg.js/ezgif-frame-001.jpg" alt="Frame 001">
+      <div id="color-info">Detecting...</div>
+    </div>
+    <div class="card bg-inverted">
+      <h3>Inverted (Dark Mode)</h3>
+      <img src="ezgif-63be88cbbd9455f6-jpg.js/ezgif-frame-001.jpg" alt="Frame 001">
+    </div>
+    <div class="card bg-luma-key">
+      <h3>Luma Key (Transparent Canvas on #050505)</h3>
+      <canvas id="canvas-luma"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const img = document.getElementById('test-img');
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      
+      try {
+        const pixel = ctx.getImageData(5, 5, 1, 1).data;
+        const rgbColor = `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`;
+        const hexColor = "#" + ((1 << 24) + (pixel[0] << 16) + (pixel[1] << 8) + pixel[2]).toString(16).slice(1);
+        
+        document.getElementById('color-info').innerText = `Detected bg: ${hexColor} (${rgbColor})`;
+        document.getElementById('match-card').style.backgroundColor = hexColor;
+        
+        // Setup luma key canvas
+        const lumaCanvas = document.getElementById('canvas-luma');
+        lumaCanvas.width = img.naturalWidth;
+        lumaCanvas.height = img.naturalHeight;
+        const lumaCtx = lumaCanvas.getContext('2d');
+        
+        const imgData = ctx.getImageData(0, 0, img.naturalWidth, img.naturalHeight);
+        const data = imgData.data;
+        
+        // Luma key logic
+        // We want to make pixels close to the background color transparent.
+        // Let's also handle the soft shadow: instead of making it fully transparent,
+        // we can let the shadow be dark. But wait, in a white background, shadows are dark gray,
+        // so their brightness is lower than the background.
+        // If we just key out the bright background, the dark shadow will stay!
+        // But since it is dark, it will blend perfectly onto a dark background as a shadow!
+        // Let's see how that looks.
+        
+        const bgR = 230; // approx white background threshold
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i+1];
+          const b = data[i+2];
+          
+          // Calculate brightness
+          const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+          
+          if (luma > 220) {
+            // Fade out based on brightness
+            const factor = (255 - luma) / (255 - 220); // 0 at 255, 1 at 220
+            data[i+3] = Math.floor(factor * 255);
+          }
+        }
+        
+        lumaCtx.putImageData(imgData, 0, 0);
+      } catch (e) {
+        document.getElementById('color-info').innerText = "CORS error: " + e.message;
+      }
+    };
+  </script>
+</body>
+</html>
